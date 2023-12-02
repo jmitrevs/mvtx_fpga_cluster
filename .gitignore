@@ -1,3 +1,18 @@
+Makefile.in
+aclocal.m4
+autom4te.cache/
+build/
+config.guess
+config.sub
+configure
+depcomp
+install-sh
+ltmain.sh
+macro/offline_fpga_accuracy.C
+macro/offline_fpga_accuracy.pdf
+macro/outputClusters.root
+missing
+
 # Prerequisites
 *.d
 

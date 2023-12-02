@@ -375,7 +375,7 @@ void mvtxFPGAclustering::calculateClusterCentroid(std::pair<int, int> constituen
   col = floor(precise_col);
   row = floor(precise_row);
   col_quad = precise_col - col < 0.5 ? 0 : 1; 
-  row_quad = precise_row - row < 0.5 ? 1 : 0; //To account for rows going in reverse 
+  row_quad = precise_row - row < 0.5 ? 0 : 1; //To account for rows going in reverse 
 }
 
 void mvtxFPGAclustering::calculateLocalClusterPostiion(float &x, float &y, int col, int row, int col_quad, int row_quad)
