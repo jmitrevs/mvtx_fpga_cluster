@@ -30,7 +30,7 @@ export ROOT_INCLUDE_PATH=/sphenix/user/cdean/software/vcpkg/installed/x64-linux/
 I keep this all in ```.bash_profile```
 
 I wrote some aliases and functions in bash to compile and delete local files with ease
-```
+```bash
 alias buildThisProject="mkdir build && cd build && ../autogen.sh --prefix=$MYINSTALL && make && make install && cd ../"
 
 alias cleanThisProject='rm -rf aclocal.m4 autom4te.cache/ config.* configure depcomp install-sh ltmain.sh Makefile.in missing build/'
@@ -60,7 +60,7 @@ function cleanThisProjectFully()
 }
 ```
 
-** Note: If you build a project for the first time, you should re-source the local setup command so it picks up the new libraries. This isn't needed if you had a version of the package built when you initially sourced the environment. The environement will pick up any changes to the libraries and headers **
+**Note: If you build a project for the first time, you should re-source the local setup command so it picks up the new libraries. This isn't needed if you had a version of the package built when you initially sourced the environment. The environement will pick up any changes to the libraries and headers**
 
 Run the ```buildThisProject``` command in the directory with the Makefile.am file in it
 
