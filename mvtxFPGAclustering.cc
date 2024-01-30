@@ -276,6 +276,8 @@ void mvtxFPGAclustering::Print(const std::string &what) const
 
 clusset mvtxFPGAclustering::runFPGAClusterAlgorithm(const hitset &aHitSet)
 {
+  int nClusters = 0;
+
   clusset aClusSet;
   aClusSet.layer = aHitSet.layer;
   aClusSet.stave = aHitSet.stave;
@@ -305,6 +307,7 @@ clusset mvtxFPGAclustering::runFPGAClusterAlgorithm(const hitset &aHitSet)
             if (deltaColumn > 1) 
             {
               writeCluster(i, aClusSet);
+              ++nClusters;
               --i;
             }
             break;
@@ -347,6 +350,23 @@ clusset mvtxFPGAclustering::runFPGAClusterAlgorithm(const hitset &aHitSet)
   while(clusterConstituents[0][0].first != 0 && clusterConstituents[0][0].second != 0)
   {
     writeCluster(0, aClusSet);
+    ++nClusters;
+  }
+
+  if (nClusters == 7)
+  {
+    std::ofstream vitis_input;
+    vitis_input.open("in.dat");
+    for (auto &hit : aHitSet.hits)
+    {
+      vitis_input << hit.first << " " << hit.second << std::endl;
+    }
+    vitis_input.close();
+
+    //Remember to make a second output file with the cluster position and size to compare output
+
+    std::cout << "Writing hits for cluster FPGA testing" << std::endl;
+    exit(1);
   }
 
   return aClusSet;
