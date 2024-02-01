@@ -49,10 +49,7 @@ void cluster_algo(hit_t source[bufferSize], int &nClusters)
         int deltaColumn = 0;
         int deltaRow = 0;
   
-        #pragma HLS bind_op variable=deltaColumn op=sub impl=fabric latency=2 
-        #pragma HLS bind_op variable=deltaRow op=sub impl=fabric latency=2 
-  
-        for (unsigned int j = 0; j < clusterDepth; j++)
+        for (unsigned int j = 0; j < maxPixelsInCluster; j++)
         {
           #pragma HLS unroll 
   	  hit_t clusterPair = clusterConstituents[i][j]; 
@@ -80,7 +77,7 @@ void cluster_algo(hit_t source[bufferSize], int &nClusters)
         if(addPairToCluster)
         {
           int nConstituents = 0;
-          for (int n= 0; n < clusterDepth; n++)
+          for (int n = 0; n < maxPixelsInCluster; n++)
           {
             #pragma HLS unroll
   

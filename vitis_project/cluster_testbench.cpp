@@ -6,7 +6,6 @@
 int main()
 {
   hit_t hits[nHits];
-  //hit_t clusters[nHits];
   int finalClusterCount = 0; 
  
   int retval = 0, i, j;
