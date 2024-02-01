@@ -12,6 +12,8 @@ macro/offline_fpga_accuracy.C
 macro/offline_fpga_accuracy.pdf
 macro/outputClusters.root
 missing
+cluster/
+vitis_hls.log
 
 # Prerequisites
 *.d
