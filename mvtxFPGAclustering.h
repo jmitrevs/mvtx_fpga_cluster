@@ -91,6 +91,7 @@ class mvtxFPGAclustering : public SubsysReco
   void runFast( bool val ) { m_runFast = val; }
   void useFile( std::string file ){ file = m_inFile; }
   void writeFile( std::string file ){ m_outFile = file; }
+  void writeVitisFile( bool write ){ m_writeVitisFiles = write; }
 
  private:
 
@@ -111,7 +112,8 @@ class mvtxFPGAclustering : public SubsysReco
   std::vector<unsigned int> clusSize_fpga;
   unsigned int nClusters_fpga = 0;
 
-  bool m_runFast = false; 
+  bool m_runFast = false;
+  bool m_writeVitisFiles = true; 
   
   std::string m_inFile = "Signal.json";
 

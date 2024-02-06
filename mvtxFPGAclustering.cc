@@ -353,20 +353,30 @@ clusset mvtxFPGAclustering::runFPGAClusterAlgorithm(const hitset &aHitSet)
     ++nClusters;
   }
 
-  if (nClusters == 7)
+  if (m_writeVitisFiles)
   {
-    std::ofstream vitis_input;
-    vitis_input.open("in.dat");
-    for (auto &hit : aHitSet.hits)
+    if (nClusters == 7)
     {
-      vitis_input << hit.first << " " << hit.second << std::endl;
+      std::ofstream vitis_input;
+      vitis_input.open("../vitis_project/in.dat");
+
+      std::ofstream vitis_output;
+      vitis_output.open("../vitis_project/out.golden.dat");
+      for (auto &hit : aHitSet.hits)
+      {
+        vitis_input << hit.first << " " << hit.second << std::endl;
+      }
+      vitis_input.close();
+
+      for (auto &cluster : aClusSet.clusters)
+      {
+        vitis_output << cluster.first.first << " " << cluster.first.second << " " << cluster.second.first << " " << cluster.second.second << std::endl;
+      }
+      vitis_output.close();
+      
+      std::cout << "Writing hits for cluster FPGA testing" << std::endl;
+      exit(1);
     }
-    vitis_input.close();
-
-    //Remember to make a second output file with the cluster position and size to compare output
-
-    std::cout << "Writing hits for cluster FPGA testing" << std::endl;
-    exit(1);
   }
 
   return aClusSet;
