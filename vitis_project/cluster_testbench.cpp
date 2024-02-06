@@ -6,7 +6,7 @@
 int main()
 {
   hit_t hits[nHits];
-  int finalClusterCount = 0; 
+  cluster_t clusters[nClusters];
  
   int retval = 0, i, j;
 
@@ -32,12 +32,12 @@ int main()
       std::cout << "Printing hit " << j << ": (col, row) =  (" << hits[j].first << ", " << hits[j].second << ")" << std::endl;
 
     //send hit array to cluster top function
-    cluster(hits, finalClusterCount);
+    cluster(hits, clusters);
   }
 
   outFile=fopen("out.dat","w");
-  std::cout << "Number of clusters is " << finalClusterCount << std::endl;
-  fprintf(outFile, "%d\n", finalClusterCount);
+  for (unsigned int i = 0; i < nClusters; i++)
+    fprintf(outFile, "%d %d %d %d\n", clusters[i].first.first, clusters[i].first.second, clusters[i].second.first, clusters[i].second.second);
   fclose(outFile);
 
   // Compare the results file with the golden results

@@ -5,8 +5,9 @@
 
 #include "cluster.h"
 #include  <iostream>
+#include <cmath>
 
-hit_t pairInitilizer{0,0};
+hit_t pairInitilizer{0, 0}; //If this is  (0,0) then we miss any pixel in the corner. To use this pixel, set initialiser to (-1,-1) but you need to initialise all the array elements to -1 inside cluster algo so could be a memory issue
 hit_t clusterConstituents[clusterDepth][maxPixelsInCluster];
 
 bool isInRange(int min, int value, int max)
@@ -14,28 +15,57 @@ bool isInRange(int min, int value, int max)
   return min <= value && value <= max;
 }
 
-void writeCluster(const int index)
+void writeCluster(const int index, cluster_t myCluster) //Can we handle moving clusters in global memory or do we need to pass the cluster list as an IO
 {
-  //Now remove the cluster and shift everything back one in the array                                   
+  //Remember to weight from center of pixel, not the edge (add 0.5 to each pixel)
+  //This should be right but the rows count from the top left of the chip (so row 0 is at +0.687cm while rown 511 is at -0.687cm)
+  float precise_col = 0;
+  float precise_row = 0;
+
+  int nConstituents = 0;
+  for (unsigned int i = 0; i < maxPixelsInCluster; ++i)
+  {
+    if (clusterConstituents[index][i] == pairInitilizer) break;
+    ++nConstituents;
+  }
+
+  for (int i = 0; i < nConstituents; i++)
+  {
+    #pragma HLS unroll
+    precise_col += (clusterConstituents[index][i].first + 0.5) / nConstituents;
+    precise_row += (clusterConstituents[index][i].second + 0.5) / nConstituents;
+  }
+
+  myCluster.first.first = floor(precise_col); //Centroid column
+  myCluster.first.second = floor(precise_row); //Centroid row
+  myCluster.second.first = precise_col - myCluster.first.first < 0.5 ? 0 : 1; //Column quadrant
+  myCluster.second.second = precise_row - myCluster.first.second < 0.5 ? 0 : 1; //Row quadrant
+
+   //#ifndef __SYNTHESIS__
+     std::cout << "myCluster info: (col, row) = (" << myCluster.first.first << ", " << myCluster.first.second << "), (col quad, row quad) = (" << myCluster.second.first << ", " << myCluster.second.second << ")" << std::endl;
+   //#endif
+
+  //Now remove the cluster and shift everything back one in the array
   for (unsigned int j = index; j < clusterDepth - 1; j++)
   {
     #pragma HLS loop_flatten off
     for (unsigned int k = 0; k < maxPixelsInCluster; k++)
     {
       #pragma HLS unroll
+      #ifndef __SYNTHESIS__
+      std::cout << "Cluster index  " << index << " has constituent (" << clusterConstituents[j][k].first << ", " << clusterConstituents[j][k].second << ")" << std::endl;
+      #endif
       clusterConstituents[j][k] = clusterConstituents[j + 1][k];
     }
-
     if (clusterConstituents[j][0] == pairInitilizer) break;
   }
 }
 
-void cluster_algo(hit_t source[bufferSize], int &nClusters)
+void cluster_algo(hit_t source[hitBufferSize], cluster_t sink[clusBufferSize])
 {
-  nClusters = 0; 
-
+  cluster_t constructedCluster; //Can we pass the whole sink to writeCluster?
   ClusterAlgoBegin_Loop:
-  for (unsigned int k = 0; k < bufferSize; k++) 
+  for (unsigned int k = 0; k < hitBufferSize; k++) 
   {
     #pragma HLS loop_flatten off
 
@@ -43,37 +73,39 @@ void cluster_algo(hit_t source[bufferSize], int &nClusters)
     for(unsigned int i = 0; i < clusterDepth; i++)
     {
       hit_t theFirstPixelPair = clusterConstituents[i][0];
-      if (theFirstPixelPair.first != 0 && theFirstPixelPair.second != 0) //We have a cluster here, lets check if this hit belongs to it                                                        
+      if (theFirstPixelPair != pairInitilizer) //We have a cluster here, lets check if this hit belongs to it                                                        
       {
         bool addPairToCluster = false;
         int deltaColumn = 0;
         int deltaRow = 0;
   
-        for (unsigned int j = 0; j < maxPixelsInCluster; j++)
+        for (unsigned int j = 0; j < maxPixelsInCluster; j++) // -1 to avoid running to the end of the array where we need a boundary or pair initializer
         {
           #pragma HLS unroll 
-  	  hit_t clusterPair = clusterConstituents[i][j]; 
-  	  if (clusterPair == pairInitilizer) //we've found the empty array elemnt, check and see if this cluster is complete                                                                                   
-  	  {
-  	    if (deltaColumn > 1)
-  	    {
-  	      writeCluster(i);
-  	      ++nClusters;
-  	      --i;
-  	    }
-  	    break;
-  	  }
-  	
+      	  hit_t clusterPair = clusterConstituents[i][j]; 
+
+      	  if (clusterPair == pairInitilizer) //we've found the empty array element, check and see if this cluster is complete
+      	  {
+      	    if (deltaColumn > 1) //Careful here! We dont write a cluster until the next loop iteration so we need an extra memory slot
+      	    {
+      	      writeCluster(i, constructedCluster);
+              sink[0] = constructedCluster;
+      	      --i;
+      	    }
+      	    break;
+      	  }
+      	
           deltaColumn = source[k].first - clusterPair.first; //If the difference between this hits column and the last column in the cluster is > 1, we've completed the cluster                                     
-  	  deltaRow = source[k].second - clusterPair.second;
-  	  bool adjacentPixel = isInRange(0, deltaColumn, 1) && isInRange(-1, deltaRow, 1); 
-  	  if (adjacentPixel)
-  	  {
-  	    addPairToCluster = true;
-  	    break;
-  	  }
+      	  deltaRow = source[k].second - clusterPair.second;
+      	  bool adjacentPixel = isInRange(0, deltaColumn, 1) && isInRange(-1, deltaRow, 1); 
+      	  if (adjacentPixel)
+      	  {
+      	    addPairToCluster = true;
+      	    break;
+      	  }
+
         }
-  	      
+      	      
         if(addPairToCluster)
         {
           int nConstituents = 0;
@@ -81,10 +113,10 @@ void cluster_algo(hit_t source[bufferSize], int &nClusters)
           {
             #pragma HLS unroll
   
-  	    hit_t pixelPair = clusterConstituents[i][n]; 
-  	    if (pixelPair.first == 0 && pixelPair.second == 0) break;
-  	    ++nConstituents;
-  	  }
+  	        hit_t pixelPair = clusterConstituents[i][n]; 
+  	        if (pixelPair == pairInitilizer) break;
+  	        ++nConstituents;
+  	      }
   
           clusterConstituents[i][nConstituents] = source[k];
           break; //Only to be used when we add a hit to a cluster                                       
@@ -101,46 +133,47 @@ void cluster_algo(hit_t source[bufferSize], int &nClusters)
      }
    } // end the for loop
 
-   while(clusterConstituents[0][0].first != 0 && clusterConstituents[0][0].second != 0)
+   while(clusterConstituents[0][0] != pairInitilizer)
    {
-     writeCluster(0);
-     ++nClusters;
+     writeCluster(0, constructedCluster);
+                  sink[0] = constructedCluster;
    }
 }
 
-void read_data(hit_t input[nHits], hit_t buf[bufferSize])
+void read_data(hit_t input[nHits], hit_t buf[hitBufferSize])
 {
-  int r;
-  
   RD_Loop_Row:
-  for (r = 0; r < bufferSize; r++)
+  for (int i = 0; i < hitBufferSize; i++)
   {
-    buf[r] = input[r];
+    buf[i] = input[i];
   }
 }
 
-void write_data(int toWrite, int &output)
+void write_data(cluster_t buf[clusBufferSize], cluster_t output[nClusters])
 {
   WR_Loop_Row:
-  output = toWrite;
+  for (int i = 0; i < clusBufferSize; i++)
+  {
+    output[i] = buf[i];
+  }
 }
 
-void cluster(hit_t in[nHits], int &out)
+void cluster(hit_t in[nHits], cluster_t out[nClusters])
 {
-
-   hit_t buf_in[bufferSize];
-   int outCount = 0; 
+   hit_t buf_in[hitBufferSize];
+   cluster_t buf_out[clusBufferSize];
 
    // Read input data. Fill the internal buffer.
    read_data(in, buf_in);
 
-   cluster_algo(buf_in, outCount);
-
-   #ifndef __SYNTHESIS__
-   std::cout << "outCount is " << outCount << std::endl;
-   #endif
+   cluster_algo(buf_in, buf_out);
 
    // Write out the results.
-   write_data(outCount, out);
+   write_data(buf_out, out);
+
+   //#ifndef __SYNTHESIS__
+   for (unsigned int i = 0; i < nClusters; i++)
+     std::cout << "Cluster info: (col, row) = (" << out[i].first.first << ", " << out[i].first.second << "), (col quad, row quad) = (" << out[i].second.first << ", " << out[i].second.second << ")" << std::endl;
+   //#endif
 }
 
