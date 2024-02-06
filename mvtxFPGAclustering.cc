@@ -294,7 +294,7 @@ clusset mvtxFPGAclustering::runFPGAClusterAlgorithm(const hitset &aHitSet)
     //Using a for loop that will start a new cluster if this hit doesn't belong to an existing cluster
     for(unsigned int i = 0; i < maxClusters; i++) // Only works if we move all clusters up the array like a FIFO when we finish a cluster
     {
-      if (clusterConstituents[i][0].first != 0 && clusterConstituents[i][0].second != 0) //We have a cluster here, lets check if this hit belongs to it
+      if (clusterConstituents[i][0] != pairInitilizer) //We have a cluster here, lets check if this hit belongs to it
       {
         bool addPairToCluster = false;
         int deltaColumn = 0;
@@ -328,7 +328,7 @@ clusset mvtxFPGAclustering::runFPGAClusterAlgorithm(const hitset &aHitSet)
           int nConstituents = 0;
           for (auto &pixelPair : clusterConstituents[i])
           {
-            if (pixelPair.first == 0 && pixelPair.second == 0) break;
+            if (pixelPair == pairInitilizer) break;
             ++nConstituents;
           }
           clusterConstituents[i][nConstituents] = hit;
@@ -347,7 +347,7 @@ clusset mvtxFPGAclustering::runFPGAClusterAlgorithm(const hitset &aHitSet)
   }
 
   //Write and clear the cluster buffer
-  while(clusterConstituents[0][0].first != 0 && clusterConstituents[0][0].second != 0)
+  while(clusterConstituents[0][0] != pairInitilizer)
   {
     writeCluster(0, aClusSet);
     ++nClusters;
@@ -392,7 +392,7 @@ void mvtxFPGAclustering::calculateClusterCentroid(std::pair<int, int> constituen
   int nConstituents = 0;
   for (unsigned int i = 0; i < maxPixelsInCluster; ++i)
   {
-    if (constituents[i].first == 0 && constituents[i].second == 0) break;
+    if (constituents[i] == pairInitilizer) break;
     ++nConstituents;
   }
 
@@ -433,7 +433,7 @@ void mvtxFPGAclustering::writeCluster(const int index, clusset &myClusSet)
   int nConstituents = 0;
   for (unsigned int i = 0; i < maxPixelsInCluster; ++i)
   {
-    if (clusterConstituents[index][i].first == 0 && clusterConstituents[index][i].second == 0) break;
+    if (clusterConstituents[index][i] == pairInitilizer) break;
     ++nConstituents;
   }
 
