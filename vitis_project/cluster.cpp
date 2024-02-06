@@ -10,45 +10,49 @@
 hit_t pairInitilizer{0, 0}; //If this is  (0,0) then we miss any pixel in the corner. To use this pixel, set initialiser to (-1,-1) but you need to initialise all the array elements to -1 inside cluster algo so could be a memory issue
 hit_t clusterConstituents[clusterDepth][maxPixelsInCluster];
 
-bool isInRange(int min, int value, int max)
+bool isInRange(int min, int value, int max) //This may be an issue. Vitis might not allow return values so a void could be used here (or just write the logic out)
 {
   return min <= value && value <= max;
 }
 
-void writeCluster(const int index, cluster_t myCluster) //Can we handle moving clusters in global memory or do we need to pass the cluster list as an IO
+void writeCluster(const int index, cluster_t& myCluster) //Can we handle moving clusters in global memory or do we need to pass the cluster list as an IO
 {
   //Remember to weight from center of pixel, not the edge (add 0.5 to each pixel)
   //This should be right but the rows count from the top left of the chip (so row 0 is at +0.687cm while rown 511 is at -0.687cm)
+
   float precise_col = 0;
   float precise_row = 0;
 
   int nConstituents = 0;
+  writeCluster_findNumPixels:
   for (unsigned int i = 0; i < maxPixelsInCluster; ++i)
   {
+    #pragma HLS PIPELINE II=5
     if (clusterConstituents[index][i] == pairInitilizer) break;
     ++nConstituents;
   }
 
+
+  writeCluster_getPreciseCentroid:
   for (int i = 0; i < nConstituents; i++)
   {
-    #pragma HLS unroll
+    #pragma HLS UNROLL
     precise_col += (clusterConstituents[index][i].first + 0.5) / nConstituents;
     precise_row += (clusterConstituents[index][i].second + 0.5) / nConstituents;
   }
 
+  writeCluster_makeClusterInfo:
   myCluster.first.first = floor(precise_col); //Centroid column
   myCluster.first.second = floor(precise_row); //Centroid row
   myCluster.second.first = precise_col - myCluster.first.first < 0.5 ? 0 : 1; //Column quadrant
   myCluster.second.second = precise_row - myCluster.first.second < 0.5 ? 0 : 1; //Row quadrant
 
-   //#ifndef __SYNTHESIS__
-     std::cout << "myCluster info: (col, row) = (" << myCluster.first.first << ", " << myCluster.first.second << "), (col quad, row quad) = (" << myCluster.second.first << ", " << myCluster.second.second << ")" << std::endl;
-   //#endif
-
   //Now remove the cluster and shift everything back one in the array
+  writeCluster_clearCluster:
   for (unsigned int j = index; j < clusterDepth - 1; j++)
   {
     #pragma HLS loop_flatten off
+	 writeCluster_clearPixels:
     for (unsigned int k = 0; k < maxPixelsInCluster; k++)
     {
       #pragma HLS unroll
@@ -63,6 +67,7 @@ void writeCluster(const int index, cluster_t myCluster) //Can we handle moving c
 
 void cluster_algo(hit_t source[hitBufferSize], cluster_t sink[clusBufferSize])
 {
+  int write_index = 0;
   cluster_t constructedCluster; //Can we pass the whole sink to writeCluster?
   ClusterAlgoBegin_Loop:
   for (unsigned int k = 0; k < hitBufferSize; k++) 
@@ -89,7 +94,8 @@ void cluster_algo(hit_t source[hitBufferSize], cluster_t sink[clusBufferSize])
       	    if (deltaColumn > 1) //Careful here! We dont write a cluster until the next loop iteration so we need an extra memory slot
       	    {
       	      writeCluster(i, constructedCluster);
-              sink[0] = constructedCluster;
+              sink[write_index] = constructedCluster;
+              ++write_index;
       	      --i;
       	    }
       	    break;
@@ -136,7 +142,8 @@ void cluster_algo(hit_t source[hitBufferSize], cluster_t sink[clusBufferSize])
    while(clusterConstituents[0][0] != pairInitilizer)
    {
      writeCluster(0, constructedCluster);
-                  sink[0] = constructedCluster;
+     sink[write_index] = constructedCluster;
+      ++write_index;
    }
 }
 
