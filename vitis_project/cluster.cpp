@@ -2,10 +2,12 @@
 # Copyright (C) 2023, Advanced Micro Devices, Inc. All rights reserved.
 # SPDX-License-Identifier: X11
 */
-
+#include "hls_math.h"
 #include "cluster.h"
 #include  <iostream>
 #include <cmath>
+#include "ap_fixed.h"
+#include "ap_int.h"
 
 hit_t pairInitilizer{0, 0}; //If this is  (0,0) then we miss any pixel in the corner. To use this pixel, set initialiser to (-1,-1) but you need to initialise all the array elements to -1 inside cluster algo so could be a memory issue
 hit_t clusterConstituents[clusterDepth][maxPixelsInCluster];
@@ -20,10 +22,10 @@ void writeCluster(const int index, cluster_t& myCluster) //Can we handle moving 
   //Remember to weight from center of pixel, not the edge (add 0.5 to each pixel)
   //This should be right but the rows count from the top left of the chip (so row 0 is at +0.687cm while rown 511 is at -0.687cm)
 
-  float precise_col = 0;
-  float precise_row = 0;
+  ap_ufixed<6,2> precise_col = 0;
+  ap_ufixed<5,2> precise_row = 0;
 
-  int nConstituents = 0;
+  ap_int<5> nConstituents = 0;
   writeCluster_findNumPixels:
   for (unsigned int i = 0; i < maxPixelsInCluster; ++i)
   {
@@ -32,26 +34,49 @@ void writeCluster(const int index, cluster_t& myCluster) //Can we handle moving 
     ++nConstituents;
   }
 
-
   writeCluster_getPreciseCentroid:
-  for (int i = 0; i < nConstituents; i++)
+  for (int i = 0; i < maxPixelsInCluster; i++)
   {
-    #pragma HLS UNROLL
-    precise_col += (clusterConstituents[index][i].first + 0.5) / nConstituents;
-    precise_row += (clusterConstituents[index][i].second + 0.5) / nConstituents;
+    //#pragma HLS loop_tripcount min=0 max=6
+#pragma HLS unroll
+    precise_col += (clusterConstituents[index][i].first);
+  precise_row += (clusterConstituents[index][i].second);
   }
 
+ap_ufixed<1,1> offset = 0.5;
+
+  precise_col += (offset*nConstituents); 
+  precise_row += (offset*nConstituents); 
+
+  precise_col = precise_col/nConstituents; 
+  precise_row = precise_row/nConstituents; 
+
   writeCluster_makeClusterInfo:
-  myCluster.first.first = floor(precise_col); //Centroid column
-  myCluster.first.second = floor(precise_row); //Centroid row
-  myCluster.second.first = precise_col - myCluster.first.first < 0.5 ? 0 : 1; //Column quadrant
-  myCluster.second.second = precise_row - myCluster.first.second < 0.5 ? 0 : 1; //Row quadrant
+
+  myCluster.first.first = hls::floor(precise_col); //Centroid column
+  myCluster.first.second = hls::floor(precise_row); //Centroid row
+  // better resource usage than conditional if statement 
+  ap_ufixed<5,1> diffCol = precise_col - myCluster.first.first; 
+  ap_ufixed<4,1> diffRow = precise_row - myCluster.first.second;
+
+  if(diffCol < offset){
+    myCluster.second.first = 0; 
+    if(diffRow < offset)myCluster.second.second = 0; 
+    else myCluster.second.second = 1; 
+  }
+  else{
+    myCluster.second.first = 1; 
+    if(diffRow < offset)myCluster.second.second = 0; 
+    else myCluster.second.second = 1;
+  }
+
 
   //Now remove the cluster and shift everything back one in the array
   writeCluster_clearCluster:
   for (unsigned int j = index; j < clusterDepth - 1; j++)
   {
     #pragma HLS loop_flatten off
+    hit_t clusterPair = clusterConstituents[j][0];
 	 writeCluster_clearPixels:
     for (unsigned int k = 0; k < maxPixelsInCluster; k++)
     {
@@ -61,7 +86,7 @@ void writeCluster(const int index, cluster_t& myCluster) //Can we handle moving 
       #endif
       clusterConstituents[j][k] = clusterConstituents[j + 1][k];
     }
-    if (clusterConstituents[j][0] == pairInitilizer) break;
+    if (clusterPair == pairInitilizer) break;
   }
 }
 
@@ -81,8 +106,8 @@ void cluster_algo(hit_t source[hitBufferSize], cluster_t sink[clusBufferSize])
       if (theFirstPixelPair != pairInitilizer) //We have a cluster here, lets check if this hit belongs to it                                                        
       {
         bool addPairToCluster = false;
-        int deltaColumn = 0;
-        int deltaRow = 0;
+        ap_int<2> deltaColumn = 0;
+        ap_int<2> deltaRow = 0;
   
         for (unsigned int j = 0; j < maxPixelsInCluster; j++) // -1 to avoid running to the end of the array where we need a boundary or pair initializer
         {
@@ -114,7 +139,7 @@ void cluster_algo(hit_t source[hitBufferSize], cluster_t sink[clusBufferSize])
       	      
         if(addPairToCluster)
         {
-          int nConstituents = 0;
+          ap_int<5> nConstituents = 0;
           for (int n = 0; n < maxPixelsInCluster; n++)
           {
             #pragma HLS unroll
@@ -150,8 +175,10 @@ void cluster_algo(hit_t source[hitBufferSize], cluster_t sink[clusBufferSize])
 void read_data(hit_t input[nHits], hit_t buf[hitBufferSize])
 {
   RD_Loop_Row:
+#pragma HLS INLINE off
   for (int i = 0; i < hitBufferSize; i++)
   {
+#pragma HLS pipeline
     buf[i] = input[i];
   }
 }
@@ -159,8 +186,10 @@ void read_data(hit_t input[nHits], hit_t buf[hitBufferSize])
 void write_data(cluster_t buf[clusBufferSize], cluster_t output[nClusters])
 {
   WR_Loop_Row:
+#pragma HLS INLINE off
   for (int i = 0; i < clusBufferSize; i++)
   {
+#pragma HLS pipeline II=7
     output[i] = buf[i];
   }
 }
@@ -178,9 +207,9 @@ void cluster(hit_t in[nHits], cluster_t out[nClusters])
    // Write out the results.
    write_data(buf_out, out);
 
-   //#ifndef __SYNTHESIS__
+   #ifndef __SYNTHESIS__
    for (unsigned int i = 0; i < nClusters; i++)
      std::cout << "Cluster info: (col, row) = (" << out[i].first.first << ", " << out[i].first.second << "), (col quad, row quad) = (" << out[i].second.first << ", " << out[i].second.second << ")" << std::endl;
-   //#endif
+   #endif
 }
 
