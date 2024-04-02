@@ -22,7 +22,6 @@ int main()
   }
 
   fclose(inFile);
-
   
   for (unsigned int i = 0; i < 2; ++i)
   {
