@@ -4,8 +4,12 @@
 */
 
 #include "cluster.h"
-#include  <iostream>
+
+#include <ap_fixed.h>
+#include <ap_int.h>
 #include <cmath>
+#include <iostream>
+#include <hls_math.h>
 
 hit_t pairInitilizer{0, 0}; //If this is  (0,0) then we miss any pixel in the corner. To use this pixel, set initialiser to (-1,-1) but you need to initialise all the array elements to -1 inside cluster algo so could be a memory issue
 hit_t clusterConstituents[clusterDepth][maxPixelsInCluster];
@@ -20,8 +24,10 @@ void writeCluster(const int index, cluster_t& myCluster) //Can we handle moving 
   //Remember to weight from center of pixel, not the edge (add 0.5 to each pixel)
   //This should be right but the rows count from the top left of the chip (so row 0 is at +0.687cm while rown 511 is at -0.687cm)
 
-  float precise_col = 0;
-  float precise_row = 0;
+  //float precise_col2 = 0;
+  //float precise_row2 = 0;
+  ap_ufixed<14,10> precise_col = 0; 
+  ap_ufixed<13,9> precise_row = 0; 
 
   int nConstituents = 0;
   writeCluster_findNumPixels:
@@ -32,20 +38,60 @@ void writeCluster(const int index, cluster_t& myCluster) //Can we handle moving 
     ++nConstituents;
   }
 
-
   writeCluster_getPreciseCentroid:
-  for (int i = 0; i < nConstituents; i++)
+  ap_ufixed<4,0> offset = 0.5;
+  for (int i = 0; i < maxPixelsInCluster; i++)
   {
-    #pragma HLS UNROLL
-    precise_col += (clusterConstituents[index][i].first + 0.5) / nConstituents;
-    precise_row += (clusterConstituents[index][i].second + 0.5) / nConstituents;
+    #pragma HLS unroll
+    if(i == nConstituents)break; 
+    //precise_col2 += (clusterConstituents[index][i].first + 0.5)/nConstituents;
+    //precise_row2 += (clusterConstituents[index][i].second+0.5)/nConstituents;
+    precise_col  += (clusterConstituents[index][i].first+offset)/nConstituents;
+    precise_row  += (clusterConstituents[index][i].second+offset)/nConstituents;
+#ifndef __SYNTHESIS__
+    std::cout << "In loop: precise col is " << precise_col << " precise_row is " << precise_row << std::endl;
+    //std::cout << "In loop: precise col2 is " << precise_col2 << " precise_row2 is " << precise_row2 << std::endl;
+#endif
+
   }
 
+//  ap_ufixed<1,0> offset = 0.5;
+//#ifndef __SYNTHESIS__
+//  std::cout << "offset is: " << offset << std::endl;
+//#endif
+//  //float offset = 0.5; 
+//
+  // precise_col += (offset*nConstituents); 
+  //precise_row += (offset*nConstituents); 
+ //
+ //precise_col = precise_col/nConstituents; 
+ //precise_row = precise_row/nConstituents; 
+
   writeCluster_makeClusterInfo:
-  myCluster.first.first = floor(precise_col); //Centroid column
-  myCluster.first.second = floor(precise_row); //Centroid row
-  myCluster.second.first = precise_col - myCluster.first.first < 0.5 ? 0 : 1; //Column quadrant
-  myCluster.second.second = precise_row - myCluster.first.second < 0.5 ? 0 : 1; //Row quadrant
+  myCluster.first.first = hls::floor(precise_col); //Centroid column
+  myCluster.first.second = hls::floor(precise_row); //Centroid row
+  // better resource usage than conditional if statement 
+  ap_ufixed<4,0> diffCol = precise_col - myCluster.first.first; 
+  ap_ufixed<4,0> diffRow = precise_row - myCluster.first.second;
+#ifndef __SYNTHESIS__
+  std::cout << "precise col is " << precise_col << " precise_row is " << precise_row << std::endl;
+  //std::cout << "precise col2 is " << precise_col2 << " precise_row2 is " << precise_row2 << std::endl;
+
+  std::cout << "diffCol is " << diffCol << " diffRow is " << diffRow << std::endl;
+#endif
+  //float diffCol = precise_col - myCluster.first.first; 
+  //float diffRow = precise_row - myCluster.first.second;
+
+  if(diffCol < offset){
+    myCluster.second.first = 0; 
+    if(diffRow < offset)myCluster.second.second = 0; 
+    else myCluster.second.second = 1; 
+  }
+  else{
+    myCluster.second.first = 1; 
+    if(diffRow < offset)myCluster.second.second = 0; 
+    else myCluster.second.second = 1;
+  }
 
   //Now remove the cluster and shift everything back one in the array
   writeCluster_clearCluster:
