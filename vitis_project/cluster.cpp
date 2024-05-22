@@ -91,6 +91,7 @@ void writeCluster(ap_uint<5> index, cluster_t& myCluster) //Can we handle moving
 
 void cluster_algo(hls::stream<hit_t> &source, hls::stream<cluster_t> &sink)
 {
+
   cluster_t constructedCluster;
   ClusterAlgoBegin_Loop:
   while (!source.empty())
@@ -177,23 +178,32 @@ void read_data(hit_t input[nHits], hls::stream<hit_t> &buf)
   }
 }
 
+void write_data(hls::stream<cluster_t> &buf, cluster_t output[nClusters]){
+  int iVal = 0;
+  while (!buf.empty())
+    {
+      output[iVal] = buf.read();
+      iVal++;
+    }
+} 
+
 void cluster(hit_t in[nHits], cluster_t out[nClusters])
 {
+
+#pragma HLS DATAFLOW
+
    hls::stream<hit_t> buf_in;
    hls::stream<cluster_t> buf_out;
+#pragma HLS STREAM variable=buf_in depth=1024 // needed for cosimulation to work
+#pragma HLS STREAM variable=buf_out depth=1024
+
 
    // Read input data. Fill the internal buffer.
    read_data(in, buf_in);
 
    cluster_algo(buf_in, buf_out);
 
-   // Write out the results
-   int iVal = 0;
-   while (!buf_out.empty())
-   {
-     out[iVal] = buf_out.read();
-     iVal++;
-   }
+   write_data(buf_out, out); 
 
    #ifndef __SYNTHESIS__
    for (unsigned int i = 0; i < nClusters; i++)
