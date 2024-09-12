@@ -14,7 +14,7 @@
 hit_t pairInitilizer{0, 0}; //If this is  (0,0) then we miss any pixel in the corner. To use this pixel, set initialiser to (-1,-1) but you need to initialise all the array elements to -1 inside cluster algo so could be a memory issue
 hit_t clusterConstituents[clusterDepth][maxPixelsInCluster];
 
-bool isInRange(ap_int<2> min, ap_int<11> value, ap_int<2> max) //This may be an issue. Can we wrap the value around to reduce bits?
+bool isInRange(ap_int<2> min, ap_int<11> value, ap_int<2> max) 
 {
   return min <= value && value <= max;
 }
@@ -55,6 +55,7 @@ void writeCluster(ap_uint<5> index, cluster_t& myCluster) //Can we handle moving
   writeCluster_makeClusterInfo:
   myCluster.first.first = hls::floor(precise_col); //Centroid column
   myCluster.first.second = hls::floor(precise_row); //Centroid row
+  
   // better resource usage than conditional if statement 
   ap_ufixed<2,0> diffCol = precise_col - myCluster.first.first; 
   ap_ufixed<2,0> diffRow = precise_row - myCluster.first.second;
@@ -89,20 +90,31 @@ void writeCluster(ap_uint<5> index, cluster_t& myCluster) //Can we handle moving
   }
 }
 
-void cluster_algo(hls::stream<hit_t> &source, hls::stream<cluster_t> &sink)
+void cluster_algo(hls::stream<input_t> &source, hls::stream<cluster_t> &sink)
 {
 
   cluster_t constructedCluster;
   ClusterAlgoBegin_Loop:
-  while (!source.empty())
-  {
+  while (!source.empty()){
     //#pragma HLS loop_flatten off 
-    hit_t thisHit = source.read();
+    input_t thisInput = source.read();
+    
+    // now handle the input
+    ap_int<1> headerBit = thisInput[19];
+    ap_int<10> colBit = thisInput.range(18,9); 
+    ap_int<9> rowBit = thisInput.range(8,0);
+
+    std::cout << " col " << colBit << " row " << rowBit << std::endl;
+ 
+
+    
+    hit_t thisHit = {colBit, rowBit}; 
     ClusterDepth_Loop:
     for(unsigned int i = 0; i < clusterDepth; i++)
     {
+
       hit_t theFirstPixelPair = clusterConstituents[i][0];
-      if (theFirstPixelPair != pairInitilizer) //We have a cluster here, lets check if this hit belongs to it                                                        
+      if (theFirstPixelPair != pairInitilizer) //We have a cluster here, lets check if this hit belongs to it                                   
       {
         bool addPairToCluster = false;
         ap_int<11> deltaColumn = 0;
@@ -116,7 +128,7 @@ void cluster_algo(hls::stream<hit_t> &source, hls::stream<cluster_t> &sink)
       	  if (clusterPair == pairInitilizer) //we've found the empty array element, check and see if this cluster is complete
       	  {
       	    if (deltaColumn > 1) //Careful here! We dont write a cluster until the next loop iteration so we need an extra memory slot
-      	    {
+	      {
       	      writeCluster(i, constructedCluster);
               sink.write(constructedCluster);
       	      --i;
@@ -160,6 +172,8 @@ void cluster_algo(hls::stream<hit_t> &source, hls::stream<cluster_t> &sink)
   	
     }
   } // end the for loop
+
+
 //Can maybe get rid of the memory flush as we stream now
    while(clusterConstituents[0][0] != pairInitilizer)
    {
@@ -169,7 +183,7 @@ void cluster_algo(hls::stream<hit_t> &source, hls::stream<cluster_t> &sink)
 
 }
 
-void read_data(hit_t input[nHits], hls::stream<hit_t> &buf)
+void read_data(input_t input[nHits], hls::stream<input_t> &buf)
 {
   RD_Loop_Row:
   for (int i = 0; i < hitBufferSize; i++)
@@ -187,16 +201,15 @@ void write_data(hls::stream<cluster_t> &buf, cluster_t output[nClusters]){
     }
 } 
 
-void cluster(hit_t in[nHits], cluster_t out[nClusters])
+void cluster(input_t in[nHits], cluster_t out[nClusters])
 {
 
 #pragma HLS DATAFLOW
 
-   hls::stream<hit_t> buf_in;
+   hls::stream<input_t> buf_in;
    hls::stream<cluster_t> buf_out;
 #pragma HLS STREAM variable=buf_in depth=1024 // needed for cosimulation to work
 #pragma HLS STREAM variable=buf_out depth=1024
-
 
    // Read input data. Fill the internal buffer.
    read_data(in, buf_in);
