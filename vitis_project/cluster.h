@@ -3,25 +3,32 @@
 
 #include <ap_int.h>
 #include <utility>
+#include <array>
 
-#define nHits 22
-#define nClusters 7
-#define hitBufferSize 22
-#define clusBufferSize 7
-#define clusterDepth 2 // buffer size for the number of clusters
+#include "hls_stream.h"
+#include "ap_int.h"
+
+constexpr unsigned int nHits = 22;
+constexpr unsigned int nClusters = 7;
+constexpr unsigned int hitBufferSize = 22;
+constexpr unsigned int clusBufferSize = 7;
+constexpr unsigned int clusterDepth = 2; // buffer size for the number of clusters
 //clusterDepth cant be equal to number of clusters in our logic. We need a free memory point to add the new cluster to before the complete cluster is written out
-#define maxPixelsInCluster 6 //
+constexpr unsigned int maxPixelsInCluster = 6;
 
 // here we define the new input
 // format is 1 bit header, 19 bit bco (when header is 1)
 // col/row (when header is 0)
-typedef ap_uint<20> input_t; 
+typedef ap_uint<20> input_t;
+typedef ap_uint<22> output_t;
 typedef std::pair<ap_uint<10>, ap_uint<9>> hit_t;
-typedef std::pair<ap_uint<1>, ap_uint<1>> quad; //Errors if this typedef is quad_t, must be defined as a type somewhere else
-typedef std::pair<hit_t, quad> cluster_t; //First pair is column and row, second is col quad, row quad
 
-extern "C" {
-  void cluster(input_t in[nHits], cluster_t out[nClusters]);
-}
+using buffer_t = std::array<hit_t, maxPixelsInCluster>;
+using buffers_t = std::array<buffer_t, clusterDepth>;
+
+using bufferValid_t = ap_uint<maxPixelsInCluster>;
+using buffersValid_t = std::array<bufferValid_t, clusterDepth>;
+
+void cluster_algo(hls::stream<input_t> &source, hls::stream<output_t> &sink);
 #endif // __CLUSTER_H__ not defined
 

@@ -69,3 +69,44 @@ int main()
 
 }
 
+void read_data(input_t input[nHits], hls::stream<input_t> &buf)
+{
+ RD_Loop_Row:
+  for (int i = 0; i < hitBufferSize; i++)
+    {
+      buf << input[i];
+    }
+}
+
+void write_data(hls::stream<cluster_t> &buf, cluster_t output[nClusters]){
+  int iVal = 0;
+  while (!buf.empty())
+    {
+      output[iVal] = buf.read();
+      iVal++;
+    }
+}
+
+void cluster(input_t in[nHits], cluster_t out[nClusters])
+{
+
+#pragma HLS DATAFLOW
+
+  hls::stream<input_t> buf_in;
+  hls::stream<cluster_t> buf_out;
+#pragma HLS STREAM variable=buf_in depth=1024 // needed for cosimulation to work
+#pragma HLS STREAM variable=buf_out depth=1024
+
+  // Read input data. Fill the internal buffer.
+  read_data(in, buf_in);
+
+  cluster_algo(buf_in, buf_out);
+
+  write_data(buf_out, out);
+
+#ifndef __SYNTHESIS__
+  for (unsigned int i = 0; i < nClusters; i++)
+    std::cout << "Cluster info: (col, row) = (" << out[i].first.first << ", " << out[i].first.second << "), (col quad, row quad) = (" << out[i].second.first << ", " << out[i].second.second << ")" << std::endl;
+#endif
+}
+
