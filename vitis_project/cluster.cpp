@@ -34,8 +34,8 @@ void flushFirstCluster(buffers_t &clusterConstituents, buffersValid_t &clusterVa
         #pragma HLS unroll
         if (clusterValids[0].test(i)) {
             ++nConstituents;
-            precise_col  += (clusterConstituents[0][i].first);
-            precise_row  += (clusterConstituents[0][i].second);
+            precise_col  += static_cast<ap_uint<10>>(clusterConstituents[0][i](18, 9));
+            precise_row  += static_cast<ap_uint<9>>(clusterConstituents[0][i](8, 0));
         }
     }
 
@@ -112,7 +112,7 @@ void cluster_algo(hls::stream<input_t> &source, hls::stream<output_t> &sink)
     }
 
     // header bit is not set, so this is a hit
-    const hit_t thisHit = {colBit, rowBit};
+    const hit_t thisHit = (colBit, rowBit);
 
     // iterate over possible clusters
     cluster_loop:
@@ -141,8 +141,8 @@ void cluster_algo(hls::stream<input_t> &source, hls::stream<output_t> &sink)
                 break;
             }
 
-            auto deltaColumn = thisHit.first - clusterConstituents[0][pixel].first;
-            auto deltaRow = thisHit.second - clusterConstituents[0][pixel].second;
+            auto deltaColumn = colBit - static_cast<ap_uint<10>>(clusterConstituents[0][pixel](18, 9));
+            auto deltaRow = rowBit - static_cast<ap_uint<9>>(clusterConstituents[0][pixel](8, 0));
 
             addCluster = addCluster || (isInRange(0, deltaColumn, 1) && isInRange(-1, deltaRow, 1));
         }  // for pixel

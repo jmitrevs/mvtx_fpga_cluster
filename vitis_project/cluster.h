@@ -21,7 +21,7 @@ constexpr unsigned int maxPixelsInCluster = 6;
 // col/row (when header is 0)
 typedef ap_uint<20> input_t;
 typedef ap_uint<22> output_t;
-typedef std::pair<ap_uint<10>, ap_uint<9>> hit_t;
+typedef ap_uint<19> hit_t;
 
 using buffer_t = std::array<hit_t, maxPixelsInCluster>;
 using buffers_t = std::array<buffer_t, clusterDepth>;
