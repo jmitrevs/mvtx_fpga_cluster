@@ -31,8 +31,8 @@ void flushFirstCluster(buffers_t &clusterConstituents, buffersValid_t &clusterVa
 
     writeCluster_getPreciseCentroid:
     for (int i = 0; i < maxPixelsInCluster; i++) {
-        //#pragma HLS unroll
-        if (clusterValids[0][i]) {
+        #pragma HLS unroll
+        if (clusterValids[0].test(i)) {
             ++nConstituents;
             precise_col  += (clusterConstituents[0][i].first);
             precise_row  += (clusterConstituents[0][i].second);
@@ -59,10 +59,10 @@ void flushFirstCluster(buffers_t &clusterConstituents, buffersValid_t &clusterVa
         theCluster(10, 2) = row;
 
         if (diffRow >= offset) {
-            theCluster.set_bit(0);
+            theCluster.set(0);
         }
         if (diffCol >= offset) {
-            theCluster.set_bit(1);
+            theCluster.set(1);
         }
 
         //Now write the cluster
@@ -79,9 +79,11 @@ void flushFirstCluster(buffers_t &clusterConstituents, buffersValid_t &clusterVa
 }
 
 // this flushes all the clusters
-void flushCluster(buffers_t &clusterConstituents, buffersValid_t &clusterValids, hls::stream<output_t> &sink) {
+void flushClusters(buffers_t &clusterConstituents, buffersValid_t &clusterValids, hls::stream<output_t> &sink) {
+    flush_clusters:
     for (unsigned i = 0; i < clusterDepth; i++) {
-        flushFirstCluster(buffers_t &clusterConstituents, buffersValid_t &clusterValids, hls::stream<output_t> &sink);
+        #pragma HLS PIPELINE II=3
+        flushFirstCluster(clusterConstituents, clusterValids, sink);
     }
 }
 void cluster_algo(hls::stream<input_t> &source, hls::stream<output_t> &sink)
@@ -98,10 +100,12 @@ void cluster_algo(hls::stream<input_t> &source, hls::stream<output_t> &sink)
 
     static buffers_t clusterConstituents;
     static buffersValid_t clusterValids = {{0, 0}};  // Note this impies clusterDepth = 2
+    #pragma HLS ARRAY_PARTITION variable=clusterConstituents complete
+    #pragma HLS ARRAY_PARTITION variable=clusterValids complete
 
     if (headerBit) {
         flushClusters(clusterConstituents, clusterValids, sink);
-        output_t theOuput = 0;
+        output_t theOutput = 0;
         theOutput(21, 2) = thisInput;
         sink.write(theOutput);
         return;
@@ -113,10 +117,11 @@ void cluster_algo(hls::stream<input_t> &source, hls::stream<output_t> &sink)
     // iterate over possible clusters
     cluster_loop:
     for (unsigned int iclus = 0; iclus < clusterDepth; iclus++) {
+#pragma HLS PIPELINE
         if (clusterValids[iclus] == 0) {
             // The cluster buffer is empty, so add the hit to start a cluster
-            clusterConstituents[iclus][0] = hit;
-            clusterValids[iclus].set_bit(0);
+            clusterConstituents[iclus][0] = thisHit;
+            clusterValids[iclus].set(0);
             break;  // finished processing
         }
 
@@ -126,11 +131,11 @@ void cluster_algo(hls::stream<input_t> &source, hls::stream<output_t> &sink)
         pixel_loop:
         for (unsigned int pixel = 0; pixel < maxPixelsInCluster; pixel++) {
             // iterate over possible pixels
-            if (clusterValids[iclus][pixel] == 0) {
+            if (!clusterValids[iclus].test(pixel)) {
                 if (addCluster) {
                     // add this hit to the cluster
                     clusterConstituents[iclus][pixel] = thisHit;
-                    clusterValids[iclus].set_bit(pixel);
+                    clusterValids[iclus].set(pixel);
                 }
                 // Either already added above, or not part of cluster; continue to next iteration
                 break;
@@ -145,29 +150,13 @@ void cluster_algo(hls::stream<input_t> &source, hls::stream<output_t> &sink)
         if (addCluster) {
             // already added (or hit maxPixelsInCluster), so done
             break;
-        } else if (iclus == iclusDepth - 1) {
+        } else if (iclus == clusterDepth - 1) {
             // no more room to add a cluster, so flush first
             flushFirstCluster(clusterConstituents, clusterValids, sink);
 
             // now start a new cluster in the newly empty place
             clusterConstituents[iclus][0] = thisHit;
-            clusterValids[iclus].set_bit(0);
+            clusterValids[iclus].set(0);
         }
     } // for cluster
-
-
-    if (clusterValids[0] == 0) {
-        // no hits in 0th cluster depth, so add hit
-        clusterConstituents[0][0] = hit;
-        clusterValids[0].set_bit(0);
-    } else {
-        // check to see if it is next to a hit
-        for (unsigned int pixel = 0; pixel < maxPixelsInCluster; pixel++) {
-            if (clusterValids[0]) {
-                auto deltaColumn = thisHit.first - clusterConstituents[0][pixel].first;
-                auto deltaRow = thisHit.second - clusterConstituents[0][pixel].second;
-                                // If the difference between this hits column and the last column in the cluster is > 1, we've completed the cluster
-            }
-        }
-    }
 }
