@@ -20,7 +20,7 @@ constexpr unsigned int maxPixelsInCluster = 6;
 // format is 1 bit header, 19 bit bco (when header is 1)
 // col/row (when header is 0)
 typedef ap_uint<20> input_t;
-typedef ap_uint<22> output_t;
+typedef ap_uint<26> output_t;
 typedef ap_uint<19> hit_t;
 
 using buffer_t = std::array<hit_t, maxPixelsInCluster>;

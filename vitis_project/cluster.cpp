@@ -25,7 +25,7 @@ void flushFirstCluster(buffers_t &clusterConstituents, buffersValid_t &clusterVa
     ap_ufixed<17,13> precise_col = 0;
     ap_ufixed<16,12> precise_row = 0;
 
-    ap_uint<5> nConstituents = 0;
+    ap_uint<4> nConstituents = 0;
 
     const ap_ufixed<2,0> offset = 0.5;
 
@@ -57,6 +57,7 @@ void flushFirstCluster(buffers_t &clusterConstituents, buffersValid_t &clusterVa
         output_t theCluster = 0;  // note, bit 21 stays 0
         theCluster(20, 11) = col;
         theCluster(10, 2) = row;
+        theCluster(25, 22) = nConstituents;
 
         if (diffRow >= offset) {
             theCluster.set(0);
