@@ -17,7 +17,7 @@ bool isInRange(ap_int<2> min, ap_int<11> value, ap_int<2> max)
     return min <= value && value <= max;
 }
 
-void flushFirstCluster(buffers_t &clusterConstituents, buffersValid_t &clusterValids, hls::stream<output_t> &sink) {
+void flushFirstCluster(ap_uint<4> chipBit, buffers_t &clusterConstituents, buffersValid_t &clusterValids, hls::stream<output_t> &sink) {
 
     //Remember to weight from center of pixel, not the edge (add 0.5 to each pixel)
     //This should be right but the rows count from the top left of the chip (so row 0 is at +0.687cm while rown 511 is at -0.687cm)
@@ -55,9 +55,10 @@ void flushFirstCluster(buffers_t &clusterConstituents, buffersValid_t &clusterVa
         ap_ufixed<2,0> diffRow = precise_row - row;
 
         output_t theCluster = 0;  // note, bit 21 stays 0
+        theCluster(25, 22) = chipBit;
         theCluster(20, 11) = col;
         theCluster(10, 2) = row;
-        theCluster(25, 22) = nConstituents;
+        theCluster(29, 26) = nConstituents;
 
         if (diffRow >= offset) {
             theCluster.set(0);
@@ -80,11 +81,11 @@ void flushFirstCluster(buffers_t &clusterConstituents, buffersValid_t &clusterVa
 }
 
 // this flushes all the clusters
-void flushClusters(buffers_t &clusterConstituents, buffersValid_t &clusterValids, hls::stream<output_t> &sink) {
+void flushClusters(ap_uint<4> chipBit, buffers_t &clusterConstituents, buffersValid_t &clusterValids, hls::stream<output_t> &sink) {
     flush_clusters:
     for (unsigned i = 0; i < clusterDepth; i++) {
         #pragma HLS PIPELINE II=3
-        flushFirstCluster(clusterConstituents, clusterValids, sink);
+        flushFirstCluster(chipBit, clusterConstituents, clusterValids, sink);
     }
 }
 void cluster_algo(hls::stream<input_t> &source, hls::stream<output_t> &sink)
@@ -96,24 +97,28 @@ void cluster_algo(hls::stream<input_t> &source, hls::stream<output_t> &sink)
     ap_uint<1> headerBit = thisInput[19];
     ap_uint<10> colBit = thisInput.range(18,9);
     ap_uint<9> rowBit = thisInput.range(8,0);
+    ap_uint<4> chipBit = thisInput.range(23,20);
 
     std::cout << " col " << colBit << " row " << rowBit << std::endl;
 
+    static ap_uint<4> storedChip = 0;
     static buffers_t clusterConstituents;
     static buffersValid_t clusterValids = {{0, 0}};  // Note this impies clusterDepth = 2
     #pragma HLS ARRAY_PARTITION variable=clusterConstituents complete
     #pragma HLS ARRAY_PARTITION variable=clusterValids complete
 
     if (headerBit) {
-        flushClusters(clusterConstituents, clusterValids, sink);
+        flushClusters(storedChip, clusterConstituents, clusterValids, sink);
         output_t theOutput = 0;
-        theOutput(21, 2) = thisInput;
+        theOutput(25, 2) = thisInput;
         sink.write(theOutput);
         return;
     }
 
     // header bit is not set, so this is a hit
     const hit_t thisHit = (colBit, rowBit);
+
+    storedChip = chipBit;
 
     // iterate over possible clusters
     cluster_loop:
@@ -153,7 +158,7 @@ void cluster_algo(hls::stream<input_t> &source, hls::stream<output_t> &sink)
             break;
         } else if (iclus == clusterDepth - 1) {
             // no more room to add a cluster, so flush first
-            flushFirstCluster(clusterConstituents, clusterValids, sink);
+            flushFirstCluster(storedChip, clusterConstituents, clusterValids, sink);
 
             // now start a new cluster in the newly empty place
             clusterConstituents[iclus][0] = thisHit;
