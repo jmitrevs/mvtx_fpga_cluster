@@ -57,14 +57,14 @@ void flushFirstCluster(ap_uint<4> chipBit, buffers_t &clusterConstituents, buffe
         output_t theCluster = 0;  // note, bit 21 stays 0
         theCluster(25, 22) = chipBit;
         theCluster(20, 11) = col;
-        theCluster(10, 2) = row;
+        theCluster(9, 1) = row;
         theCluster(29, 26) = nConstituents;
 
         if (diffRow >= offset) {
             theCluster.set(0);
         }
         if (diffCol >= offset) {
-            theCluster.set(1);
+            theCluster.set(10);
         }
 
         //Now write the cluster
