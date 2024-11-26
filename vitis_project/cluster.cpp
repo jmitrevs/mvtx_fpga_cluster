@@ -84,7 +84,7 @@ void flushFirstCluster(ap_uint<4> chipBit, buffers_t &clusterConstituents, buffe
 void flushClusters(ap_uint<4> chipBit, buffers_t &clusterConstituents, buffersValid_t &clusterValids, hls::stream<output_t> &sink) {
     flush_clusters:
     for (unsigned i = 0; i < clusterDepth; i++) {
-        #pragma HLS PIPELINE II=3
+        //#pragma HLS PIPELINE II=3
         flushFirstCluster(chipBit, clusterConstituents, clusterValids, sink);
     }
 }
@@ -150,6 +150,7 @@ void cluster_algo(hls::stream<input_t> &source, hls::stream<output_t> &sink)
     // Note:  try to add to all clusters, not just first. Merge if added to multiple
 
     std::array<bool, clusterDepth> addedHit = {{false, false}}; // assumes clusterDepth = 2
+    #pragma HLS ARRAY_PARTITION variable=addedHit complete
 
     cluster_loop:
     for (unsigned int iclus = 0; iclus < clusterDepth; iclus++) {
