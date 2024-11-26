@@ -88,6 +88,34 @@ void flushClusters(ap_uint<4> chipBit, buffers_t &clusterConstituents, buffersVa
         flushFirstCluster(chipBit, clusterConstituents, clusterValids, sink);
     }
 }
+
+
+void mergeClusters(buffers_t &clusterConstituents, buffersValid_t &clusterValids) {
+    unsigned int nConstituents0 = 0;
+    unsigned int nConstituents1 = 0;
+
+    MergeConstituentsLoop:
+    for (int i = 0; i < maxPixelsInCluster; i++) {
+        if (clusterValids[0].test(i)) ++nConstituents0;
+        if (clusterValids[1].test(i)) ++nConstituents1;
+    }
+
+    // remove duplicate (randomly from second)
+    clusterValids[1].clear(nConstituents1 - 1);
+
+    if (nConstituents0 + nConstituents1 <= maxPixelsInCluster) { // can try to optimize
+        // merge
+        MergeLoop:
+        for (int i = 0; i < nConstituents1; i++) {
+            clusterConstituents[0][nConstituents0 + i] = clusterConstituents[1][i];
+            clusterValids[0].set(nConstituents0 + i);
+        }
+        clusterValids[1] = 0;
+    }
+}
+
+
+
 void cluster_algo(hls::stream<input_t> &source, hls::stream<output_t> &sink)
 {
     // read the input
@@ -98,8 +126,6 @@ void cluster_algo(hls::stream<input_t> &source, hls::stream<output_t> &sink)
     ap_uint<10> colBit = thisInput.range(18,9);
     ap_uint<9> rowBit = thisInput.range(8,0);
     ap_uint<4> chipBit = thisInput.range(23,20);
-
-    std::cout << " col " << colBit << " row " << rowBit << std::endl;
 
     static ap_uint<4> storedChip = 0;
     static buffers_t clusterConstituents;
@@ -121,48 +147,65 @@ void cluster_algo(hls::stream<input_t> &source, hls::stream<output_t> &sink)
     storedChip = chipBit;
 
     // iterate over possible clusters
+    // Note:  try to add to all clusters, not just first. Merge if added to multiple
+
+    std::array<bool, clusterDepth> addedHit = {{false, false}}; // assumes clusterDepth = 2
+
     cluster_loop:
     for (unsigned int iclus = 0; iclus < clusterDepth; iclus++) {
 #pragma HLS PIPELINE
         if (clusterValids[iclus] == 0) {
-            // The cluster buffer is empty, so add the hit to start a cluster
-            clusterConstituents[iclus][0] = thisHit;
-            clusterValids[iclus].set(0);
+            // double check that we haven't already added it
+            // ASSUMES CLUSERDEPTH == 2 (though easy to fix:  use max(0, iclus-1) instead of 0)
+            if (!addedHit[0]) {
+                // The cluster buffer is empty, so add the hit to start a cluster
+                clusterConstituents[iclus][0] = thisHit;
+                clusterValids[iclus].set(0);
+                addedHit[iclus] = true;
+            }
             break;  // finished processing
         }
 
         // there is a cluster
-        bool addCluster = false;
+        std::cout << "Cluster found, iclus = " << iclus << std::endl;;
+
+        // Do we add the hit to the cluster
+        bool addHit = false;
 
         pixel_loop:
         for (unsigned int pixel = 0; pixel < maxPixelsInCluster; pixel++) {
             // iterate over possible pixels
             if (!clusterValids[iclus].test(pixel)) {
-                if (addCluster) {
+                if (addHit) {
                     // add this hit to the cluster
                     clusterConstituents[iclus][pixel] = thisHit;
                     clusterValids[iclus].set(pixel);
+                    addedHit[iclus] = true;
                 }
-                // Either already added above, or not part of cluster; continue to next iteration
+                // Either already added above, or not part of cluster; continue to next iteration of iclus
                 break;
             }
 
-            auto deltaColumn = colBit - static_cast<ap_uint<10>>(clusterConstituents[0][pixel](18, 9));
-            auto deltaRow = rowBit - static_cast<ap_uint<9>>(clusterConstituents[0][pixel](8, 0));
+            auto deltaColumn = colBit - static_cast<ap_uint<10>>(clusterConstituents[iclus][pixel](18, 9));
+            auto deltaRow = rowBit - static_cast<ap_uint<9>>(clusterConstituents[iclus][pixel](8, 0));
 
-            addCluster = addCluster || (isInRange(0, deltaColumn, 1) && isInRange(-1, deltaRow, 1));
+            addHit = addHit || (isInRange(-1, deltaColumn, 1) && isInRange(-1, deltaRow, 1));
+            std::cout << "delCol = " << deltaColumn << ", deltaRow = " << deltaRow << ", addHit = " << addHit << std::endl;
         }  // for pixel
-
-        if (addCluster) {
-            // already added (or hit maxPixelsInCluster), so done
-            break;
-        } else if (iclus == clusterDepth - 1) {
-            // no more room to add a cluster, so flush first
-            flushFirstCluster(storedChip, clusterConstituents, clusterValids, sink);
-
-            // now start a new cluster in the newly empty place
-            clusterConstituents[iclus][0] = thisHit;
-            clusterValids[iclus].set(0);
-        }
     } // for cluster
+
+    // this assumes clusterDept == 2
+    if (addedHit[0] && addedHit[1]) {
+        // added it to both clusters, so merge clusters if possible
+        mergeClusters(clusterConstituents, clusterValids);
+    } else if (addedHit[0] || addedHit[1]) {
+        // the usual case, all good, don't need to do anything specal
+    } else {
+        // no more room to add a cluster, so flush first
+        flushFirstCluster(storedChip, clusterConstituents, clusterValids, sink);
+
+        // now start a new cluster in the newly empty place
+        clusterConstituents[clusterDepth - 1][0] = thisHit;
+        clusterValids[clusterDepth - 1].set(0);
+    }
 }

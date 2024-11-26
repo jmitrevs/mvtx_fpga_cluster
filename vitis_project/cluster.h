@@ -13,8 +13,11 @@ constexpr unsigned int nClusters = 7;
 constexpr unsigned int hitBufferSize = 22;
 constexpr unsigned int clusBufferSize = 7;
 constexpr unsigned int clusterDepth = 2; // buffer size for the number of clusters
+// WARNING:  THE LOGIC IN PLACES ASSUMES CLUSTERDEPTH == 2 IN A FEW PLACES
+// CHECK IF UPDATING. SHOULD BE MARKED WHERE THE ASSUMPTION IS MADE
+
 //clusterDepth cant be equal to number of clusters in our logic. We need a free memory point to add the new cluster to before the complete cluster is written out
-constexpr unsigned int maxPixelsInCluster = 6;
+constexpr unsigned int maxPixelsInCluster = 15;
 
 // here we define the new input
 // format is 1 bit header, 19 bit bco (when header is 1)
